@@ -51,7 +51,8 @@ func (cc *ClientConn) Close() error {
 
 // SendMsg sends a request to a given thrift endpoint
 func (cc *ClientConn) SendMsg(ctx context.Context, method string, req IRequest, msgType MessageType) error {
-	cc.seqID++
+	// TODO: when supported, uncomment this detection
+	// cc.seqID++
 
 	if err := setRequestHeaders(ctx, cc.proto); err != nil {
 		return err
