@@ -29,15 +29,20 @@ import (
 // HTTPClientOptions.
 var DefaultHTTPClient *http.Client = http.DefaultClient
 
+// Default to 16MB response buffer limit.
+// If the response is larger than this, the buffer will be renewed.
+var DefaultHTTPResponseBufferLimit int64 = 16 * 1024 * 1024
+
 type HTTPClient struct {
-	client             *http.Client
-	response           *http.Response
-	url                *url.URL
-	requestBuffer      *bytes.Buffer
-	responseBuffer     bytes.Buffer
-	header             http.Header
-	nsecConnectTimeout int64
-	nsecReadTimeout    int64
+	client              *http.Client
+	response            *http.Response
+	url                 *url.URL
+	requestBuffer       *bytes.Buffer
+	responseBuffer      bytes.Buffer
+	responseBufferLimit int64
+	header              http.Header
+	nsecConnectTimeout  int64
+	nsecReadTimeout     int64
 }
 
 type HTTPClientTransportFactory struct {
@@ -100,7 +105,12 @@ func NewHTTPClientWithOptions(urlstr string, options HTTPClientOptions) (Transpo
 	if client == nil {
 		client = DefaultHTTPClient
 	}
-	return &HTTPClient{client: client, response: response, url: parsedURL}, nil
+	return &HTTPClient{
+		client:              client,
+		response:            response,
+		url:                 parsedURL,
+		responseBufferLimit: DefaultHTTPResponseBufferLimit,
+	}, nil
 }
 
 func NewHTTPClient(urlstr string) (Transport, error) {
@@ -117,7 +127,12 @@ func NewHTTPPostClientWithOptions(urlstr string, options HTTPClientOptions) (Tra
 	if client == nil {
 		client = DefaultHTTPClient
 	}
-	return &HTTPClient{client: client, url: parsedURL, requestBuffer: bytes.NewBuffer(buf), header: http.Header{}}, nil
+	return &HTTPClient{
+		client: client, url: parsedURL,
+		requestBuffer:       bytes.NewBuffer(buf),
+		header:              http.Header{},
+		responseBufferLimit: DefaultHTTPResponseBufferLimit,
+	}, nil
 }
 
 func NewHTTPPostClient(urlstr string) (Transport, error) {
@@ -166,6 +181,9 @@ func (p *HTTPClient) IsOpen() bool {
 func (p *HTTPClient) closeResponse() error {
 	p.response = nil
 	p.responseBuffer.Reset()
+	if p.responseBuffer.Cap() > int(p.responseBufferLimit) {
+		p.responseBuffer = bytes.Buffer{}
+	}
 	return nil
 }
 
@@ -243,4 +261,8 @@ func (p *HTTPClient) Flush() error {
 
 func (p *HTTPClient) RemainingBytes() (num_bytes uint64) {
 	return uint64(p.responseBuffer.Len())
+}
+
+func (p *HTTPClient) SetResponseBufferLimit(limit int64) {
+	p.responseBufferLimit = limit
 }
